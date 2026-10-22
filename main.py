@@ -21,18 +21,19 @@ async def search_image(file: UploadFile = File(...)):
     contents = await file.read()
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Upload sementara ke CDN publik tanpa butuh API key
-        files = {'file': (file.filename, contents, file.content_type)}
-        response = await client.post('https://tmpfiles.org/api/v1/upload', files=files)
+        # Upload ke Litterbox Catbox (direct link tanpa proteksi bot)
+        data = {
+            "reqtype": "fileupload",
+            "time": "1h"
+        }
+        files = {'fileToUpload': (file.filename, contents, file.content_type)}
+        
+        response = await client.post('https://litterbox.catbox.moe/resources/internals/api.php', data=data, files=files)
         
         if response.status_code == 200:
-            data = response.json()
-            raw_url = data.get("data", {}).get("url")
-            if raw_url:
-                # Format ke direct link CDN
-                direct_image_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                
-                # Buat pencarian Yandex berbasis URL
+            direct_image_url = response.text.strip()
+            
+            if direct_image_url.startswith("http"):
                 yandex_url = f"https://yandex.com/images/search?rpt=imageview&url={direct_image_url}"
                 
                 return {
@@ -42,4 +43,4 @@ async def search_image(file: UploadFile = File(...)):
                     "message": "Pencarian OSINT berhasil"
                 }
                 
-    return {"success": False, "error": "Gagal mengunggah gambar ke server temporary CDN"}
+    return {"success": False, "error": "Gagal mengunggah gambar ke server CDN"}
