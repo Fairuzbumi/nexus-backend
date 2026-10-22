@@ -12,14 +12,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://yandex.com",
-    "Referer": "https://yandex.com/images/"
-}
-
 @app.get("/")
 def home():
     return {"status": "OSINT Image Search Engine Online"}
@@ -27,30 +19,27 @@ def home():
 @app.post("/api/search")
 async def search_image(file: UploadFile = File(...)):
     contents = await file.read()
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        files = {'upfile': (file.filename, contents, file.content_type)}
-        response = await client.post(
-            'https://yandex.com/images-apphost/image-downloading',
-            files=files,
-            headers=HEADERS,
-            params={'rpt': 'imageview'}
-        )
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Upload sementara ke CDN publik tanpa butuh API key
+        files = {'file': (file.filename, contents, file.content_type)}
+        response = await client.post('https://tmpfiles.org/api/v1/upload', files=files)
         
         if response.status_code == 200:
-            try:
-                data = response.json()
-                image_id = data.get("image_id")
-                shard = data.get("image_shard", "")
-                yandex_url = f"https://yandex.com/images/search?rpt=imageview&url={shard}/{image_id}"
+            data = response.json()
+            raw_url = data.get("data", {}).get("url")
+            if raw_url:
+                # Format ke direct link CDN
+                direct_image_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                
+                # Buat pencarian Yandex berbasis URL
+                yandex_url = f"https://yandex.com/images/search?rpt=imageview&url={direct_image_url}"
+                
                 return {
                     "success": True,
                     "yandex_url": yandex_url,
-                    "message": "Pencarian Yandex berhasil"
+                    "image_url": direct_image_url,
+                    "message": "Pencarian OSINT berhasil"
                 }
-            except Exception as e:
-                return {"success": False, "error": f"Response JSON invalid: {str(e)}"}
-        
-        return {
-            "success": False, 
-            "error": f"Yandex menolak koneksi (Status code: {response.status_code})"
-        }
+                
+    return {"success": False, "error": "Gagal mengunggah gambar ke server temporary CDN"}
